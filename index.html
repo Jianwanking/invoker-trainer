@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>卡尔技能训练器</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="brand">
+          <img
+            class="brand-logo"
+            src="https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/invoker.png"
+            alt="卡尔头像"
+          >
+          <h1>卡尔技能训练器</h1>
+        </div>
+        <div class="hero-actions" role="tablist" aria-label="训练模式">
+          <button class="mode-tab active" type="button" data-mode-tab="random">随机技能</button>
+          <button class="mode-tab" type="button" data-mode-tab="combo">固定连招</button>
+          <button class="mode-tab" type="button" data-mode-tab="real">真实实战</button>
+          <button class="mode-tab" type="button" data-mode-tab="free">自由模式</button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="trainer-card arena" aria-label="训练区">
+          <div class="arena-heading">
+            <div>
+              <p class="eyebrow">Current Mode</p>
+              <h2 id="mode-title">随机技能</h2>
+            </div>
+            <p id="mode-subtitle">滚动随机技能，中央目标是当前要搓的招。</p>
+          </div>
+
+          <div class="rail-wrap">
+            <div id="skill-rail" class="skill-rail"></div>
+          </div>
+
+          <div id="center-target" class="center-target" aria-live="polite"></div>
+          <p id="status-line" class="status-line">敲键开始。放大的图标就是当前目标，小手别慌。</p>
+          <div id="session-combo-nav" class="session-combo-nav" hidden>
+            <button type="button" data-combo-offset="-1">上一招</button>
+            <strong id="session-combo-name"></strong>
+            <button type="button" data-combo-offset="1">下一招 <span>Enter</span></button>
+          </div>
+
+          <div class="hud">
+            <section>
+              <span class="hud-label">当前三球</span>
+              <div id="orb-row" class="orb-row"></div>
+            </section>
+
+            <section>
+              <span class="hud-label">技能槽</span>
+              <div id="slot-row" class="slot-row"></div>
+            </section>
+
+            <section>
+              <span class="hud-label">CD</span>
+              <div id="cooldown-row" class="cooldown-row"></div>
+            </section>
+
+            <section>
+              <span class="hud-label">当前装备</span>
+              <div id="equipment-row" class="equipment-row"></div>
+            </section>
+          </div>
+
+          <footer class="practice-footer">
+            <section class="recent-panel">
+              <span class="hud-label">最近按键</span>
+              <div id="recent-keys" class="recent-keys"></div>
+            </section>
+            <div class="footer-actions">
+              <button id="refresh-cds" type="button">刷新 CD</button>
+              <button id="reset-run" type="button">重新开始</button>
+            </div>
+          </footer>
+        </section>
+
+        <aside class="left-drawer settings-drawer" data-drawer="settings">
+          <button class="drawer-toggle" type="button" data-toggle-drawer="settings" data-drawer-label="设置" aria-label="打开设置" aria-expanded="false">
+            <span class="drawer-arrow">›</span>
+            <span class="drawer-label">设置</span>
+          </button>
+
+          <aside class="side-stack">
+            <section class="trainer-card controls">
+            <div class="panel-title">
+              <h2>训练设置</h2>
+            </div>
+
+            <label>
+              键位方案
+              <select id="preset-select">
+                <option value="modern">现代：QWE + R + D/F</option>
+                <option value="legacy">传统：卡尔技能键</option>
+                <option value="custom">自定义</option>
+              </select>
+            </label>
+
+            <label>
+              释放方式
+              <select id="cast-style">
+                <option value="slot">D/F 技能槽</option>
+                <option value="legacy">每技能独立键</option>
+              </select>
+            </label>
+
+            <label class="toggle-line">
+              <input id="require-invoke" type="checkbox" checked>
+              <span>随机/固定模式也要求 Invoke + 释放键</span>
+            </label>
+
+            <div class="two-col">
+              <label>
+                英雄等级
+                <input id="hero-level" type="number" min="1" max="30" value="7">
+              </label>
+              <label>
+                总球等级
+                <input id="total-orb-level" type="number" min="0" max="21" value="8">
+              </label>
+            </div>
+
+            <div class="invoke-readout">
+              <img src="https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/abilities/invoker_invoke.png" alt="">
+              <div>
+                <span>当前 Invoke CD</span>
+                <strong id="invoke-cd">4.6s</strong>
+              </div>
+            </div>
+            </section>
+
+            <section class="trainer-card equipment-settings-card">
+              <h2>装备栏</h2>
+              <p>勾选会出现在主界面装备栏；点击右侧按键可以改键。</p>
+              <div id="equipment-settings" class="equipment-settings"></div>
+            </section>
+
+            <section class="trainer-card key-panel">
+              <h2>自定义键位</h2>
+              <p>点击一行后按键即可改绑。训练监听会暂停一次，所以不会误判。</p>
+              <div id="keybinds" class="keybinds"></div>
+            </section>
+          </aside>
+        </aside>
+
+        <aside class="left-drawer combo-drawer" data-drawer="combo">
+          <button class="drawer-toggle" type="button" data-toggle-drawer="combo" data-drawer-label="连招" aria-label="打开连招" aria-expanded="false">
+            <span class="drawer-arrow">›</span>
+            <span class="drawer-label">连招</span>
+          </button>
+
+          <aside class="side-stack">
+            <section id="combo-editor" class="trainer-card combo-editor" hidden>
+            <div class="panel-title">
+              <h2>连招编辑器</h2>
+              <button id="new-combo" type="button">新建</button>
+            </div>
+
+            <div class="combo-picker">
+              <span class="field-label">选择连招</span>
+              <div class="combo-switcher">
+                <button type="button" data-combo-offset="-1">上一招</button>
+                <select id="combo-select"></select>
+                <button type="button" data-combo-offset="1">下一招</button>
+              </div>
+              <small>训练区里也可以按 Enter 下一招，Shift + Enter 上一招。</small>
+            </div>
+
+            <label>
+              连招名称
+              <input id="combo-name" type="text" maxlength="32" value="">
+            </label>
+
+            <ol id="combo-steps" class="combo-steps"></ol>
+
+            <div class="button-row">
+              <button id="add-spell" type="button">+ 技能</button>
+              <button id="add-item" type="button">+ 物品</button>
+              <button id="save-combo" type="button">保存</button>
+              <button id="delete-combo" type="button" class="danger">删除</button>
+            </div>
+            </section>
+          </aside>
+        </aside>
+
+        <aside class="left-drawer skill-drawer" data-drawer="skill">
+          <button class="drawer-toggle" type="button" data-toggle-drawer="skill" data-drawer-label="技能" aria-label="打开技能表" aria-expanded="false">
+            <span class="drawer-arrow">›</span>
+            <span class="drawer-label">技能</span>
+          </button>
+
+          <aside class="side-stack">
+            <details id="spellbook" class="trainer-card spellbook" open>
+              <summary>技能表 / 当前键位路径</summary>
+              <div id="spellbook-grid" class="spellbook-grid"></div>
+            </details>
+          </aside>
+        </aside>
+      </main>
+    </div>
+
+    <div id="picker" class="picker" hidden>
+      <div class="picker-card">
+        <div class="panel-title">
+          <h2>选择一个步骤</h2>
+          <button type="button" data-close-picker>关闭</button>
+        </div>
+        <div id="picker-grid" class="picker-grid"></div>
+      </div>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
