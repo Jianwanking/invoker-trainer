@@ -61,12 +61,14 @@ function cloneSession(session) {
     ...session,
     targets: session.targets.map((target) => ({ ...target })),
     invoker: cloneState(session.invoker),
+    comboTimer: session.comboTimer ? { ...session.comboTimer } : createComboTimer(),
     recentKeys: [...session.recentKeys],
     equippedItemIds: [...session.equippedItemIds],
     completed: session.completed.map((target) => ({ ...target })),
     free: session.free
       ? {
           ...session.free,
+          summary: session.free.summary ? { ...session.free.summary } : null,
           activeSteps: session.free.activeSteps.map((step) => ({ ...step })),
           history: session.free.history.map((row) => ({
             ...row,
@@ -277,6 +279,7 @@ export function createPracticeSession({
     pendingSpellId: null,
     equippedItemIds: [...equippedItemIds],
     invoker: createInvokerState({ totalOrbLevel, now }),
+    comboTimer: createComboTimer(),
     recentKeys: [],
     completed: [],
     free: createFreeState(),
@@ -290,8 +293,18 @@ function createFreeState() {
   return {
     activeSteps: [],
     history: [],
+    runStartAt: null,
+    runStepCount: 0,
+    summary: null,
     lastActionAt: null,
     gapMs: 5000
+  };
+}
+
+function createComboTimer() {
+  return {
+    startedAt: null,
+    lastCompletedMs: null
   };
 }
 
@@ -339,8 +352,59 @@ function usesRealCooldowns(mode) {
   return mode === "real" || mode === "free";
 }
 
+function updateSessionTimer(session, result, actionKind, now, previousIndex) {
+  if (session.mode === "random") {
+    if (session.comboTimer.startedAt === null && actionKind !== "unknown") {
+      session.comboTimer.startedAt = now;
+    }
+    return;
+  }
+
+  if (!isComboPracticeMode(session.mode)) return;
+
+  if (
+    session.comboTimer.startedAt === null &&
+    result.targetCompleted &&
+    previousIndex === 0
+  ) {
+    session.comboTimer.startedAt = now;
+  }
+
+  if (!result.targetCompleted) return;
+  if (getCurrentTarget(session)) return;
+  if (session.comboTimer.startedAt === null) return;
+
+  session.comboTimer.lastCompletedMs = Math.max(0, now - session.comboTimer.startedAt);
+  session.comboTimer.startedAt = null;
+}
+
 function ensureFreeState(session) {
   if (!session.free) session.free = createFreeState();
+}
+
+function collectFreeSteps(free) {
+  return [
+    ...free.history.flatMap((row) => row.steps),
+    ...free.activeSteps
+  ];
+}
+
+function computeFreeMetrics(free, now = Date.now()) {
+  const steps = collectFreeSteps(free);
+  const stepCount = free.runStepCount || steps.length;
+  if (!stepCount) return null;
+  const earliestStepAt = steps.length ? Math.min(...steps.map((step) => step.at ?? now)) : now;
+  const startedAt = free.runStartAt ?? earliestStepAt;
+  const endedAt = steps.length ? Math.max(now, ...steps.map((step) => step.at ?? startedAt)) : now;
+  const totalMs = Math.max(0, endedAt - startedAt);
+  const averageMs = totalMs / stepCount;
+  return {
+    startedAt,
+    endedAt,
+    totalMs,
+    averageMs,
+    steps: stepCount
+  };
 }
 
 function pushFreeHistory(session, now) {
@@ -367,8 +431,31 @@ export function finalizeFreeChain(session, now = Date.now()) {
   return next;
 }
 
+export function endFreeRun(session, now = Date.now()) {
+  if (session.mode !== "free") return session;
+  const next = cloneSession(session);
+  ensureFreeState(next);
+  pushFreeHistory(next, now);
+  next.free.summary = computeFreeMetrics(next.free, now);
+  next.lastResult = {
+    ok: true,
+    correct: false,
+    reason: null,
+    action: "free-end",
+    targetCompleted: false
+  };
+  return next;
+}
+
 function appendFreeStep(session, step, now) {
   ensureFreeState(session);
+  if (session.free.summary) {
+    session.free.history = [];
+    session.free.activeSteps = [];
+    session.free.runStartAt = null;
+    session.free.runStepCount = 0;
+    session.free.summary = null;
+  }
   if (
     session.free.activeSteps.length &&
     session.free.lastActionAt !== null &&
@@ -376,8 +463,11 @@ function appendFreeStep(session, step, now) {
   ) {
     pushFreeHistory(session, now);
   }
-
+  if (session.free.runStartAt === null) {
+    session.free.runStartAt = now;
+  }
   session.free.activeSteps.push({ ...step, at: now });
+  session.free.runStepCount += 1;
   session.free.lastActionAt = now;
 }
 
@@ -440,6 +530,7 @@ export function applyPracticeKey(session, rawCode, now = Date.now()) {
 
   const action = actionFromCode(next, code);
   result.action = action.kind;
+  const previousIndex = next.currentIndex;
 
   if (action.kind === "orb") {
     next.invoker.orbs = pushOrb(next.invoker.orbs, action.id);
@@ -527,6 +618,7 @@ export function applyPracticeKey(session, rawCode, now = Date.now()) {
     result.reason = "unmapped-key";
   }
 
+  updateSessionTimer(next, result, action.kind, now, previousIndex);
   next.lastResult = result;
   return { session: next, result };
 }
@@ -591,6 +683,7 @@ function collectElements() {
     rail: document.querySelector("#skill-rail"),
     centerTarget: document.querySelector("#center-target"),
     status: document.querySelector("#status-line"),
+    sessionTimer: document.querySelector("#session-timer"),
     sessionComboNav: document.querySelector("#session-combo-nav"),
     sessionComboName: document.querySelector("#session-combo-name"),
     orbs: document.querySelector("#orb-row"),
@@ -622,7 +715,8 @@ function collectElements() {
     equipmentSettings: document.querySelector("#equipment-settings"),
     drawerToggles: [...document.querySelectorAll("[data-toggle-drawer]")],
     refreshCds: document.querySelector("#refresh-cds"),
-    reset: document.querySelector("#reset-run")
+    reset: document.querySelector("#reset-run"),
+    endFreeRun: document.querySelector("#end-free-run")
   };
 }
 
@@ -767,6 +861,11 @@ function bindUi(app, elements) {
     render(app, elements);
   });
 
+  elements.endFreeRun.addEventListener("click", () => {
+    app.session = endFreeRun(app.session, performance.now());
+    render(app, elements);
+  });
+
   elements.refreshCds.addEventListener("click", () => {
     app.session.invoker = refreshCooldowns(app.session.invoker, performance.now());
     app.session.lastResult = {
@@ -854,6 +953,7 @@ function render(app, elements) {
   document.body.dataset.mode = app.settings.mode;
   renderMode(app, elements);
   renderRail(app, elements);
+  renderSessionTimer(app, elements);
   renderHud(app, elements);
   renderSettings(app, elements);
   renderCombos(app, elements);
@@ -873,7 +973,8 @@ function renderMode(app, elements) {
       ? "练固定连招，不考虑 CD；Enter 下一套，Shift + Enter 上一套。"
       : app.settings.mode === "real"
         ? "技能槽、Invoke、技能和物品 CD 都按真实节奏走；Enter 切连招。"
-        : "不设定目标，随便按；5 秒内算同一段连招，断开后自动上移成历史。";
+        : "不设定目标，随便按；5 秒内算同一段连招。点“结束统计”结算总时间和平均时间。";
+  elements.endFreeRun.hidden = app.settings.mode !== "free";
 }
 
 function renderRail(app, elements) {
@@ -970,6 +1071,71 @@ function renderSessionComboNav(app, elements) {
   const combo = currentEditableCombo(app);
   const index = Math.max(0, app.combos.findIndex((entry) => entry.id === combo.id));
   elements.sessionComboName.textContent = `${index + 1}/${app.combos.length} ${combo.name}`;
+}
+
+function renderSessionTimer(app, elements) {
+  const panel = elements.sessionTimer;
+  if (!panel) return;
+  const now = performance.now();
+
+  if (app.settings.mode === "random") {
+    const startedAt = app.session.comboTimer.startedAt;
+    const elapsedMs = startedAt === null ? null : Math.max(0, now - startedAt);
+    const attempts = Math.max(0, app.session.completed.length);
+    const averageMs = elapsedMs !== null && attempts > 0 ? elapsedMs / attempts : null;
+    panel.hidden = false;
+    panel.innerHTML = `
+      <span class="timer-title">随机计时</span>
+      <div class="timer-metric">
+        <span>总时间</span>
+        <strong>${formatDuration(elapsedMs)}</strong>
+      </div>
+      <div class="timer-metric">
+        <span>平均每招</span>
+        <strong>${formatDuration(averageMs)}</strong>
+      </div>
+    `;
+    return;
+  }
+
+  if (isComboPracticeMode(app.settings.mode)) {
+    const runningMs = app.session.comboTimer.startedAt === null
+      ? null
+      : Math.max(0, now - app.session.comboTimer.startedAt);
+    const totalMs = runningMs ?? app.session.comboTimer.lastCompletedMs;
+    panel.hidden = false;
+    panel.innerHTML = `
+      <span class="timer-title">连招计时</span>
+      <div class="timer-metric">
+        <span>总时间</span>
+        <strong>${formatDuration(totalMs)}</strong>
+      </div>
+      <div class="timer-metric">
+        <span>状态</span>
+        <strong>${runningMs !== null ? "进行中" : totalMs !== null ? "已完成" : "等待开始"}</strong>
+      </div>
+    `;
+    return;
+  }
+
+  if (app.settings.mode === "free") {
+    const summary = app.session.free.summary || computeFreeMetrics(app.session.free, now);
+    panel.hidden = false;
+    panel.innerHTML = `
+      <span class="timer-title">自由统计</span>
+      <div class="timer-metric">
+        <span>总时间</span>
+        <strong>${formatDuration(summary?.totalMs)}</strong>
+      </div>
+      <div class="timer-metric">
+        <span>平均每招</span>
+        <strong>${formatDuration(summary?.averageMs)}</strong>
+      </div>
+    `;
+    return;
+  }
+
+  panel.hidden = true;
 }
 
 function renderHud(app, elements) {
@@ -1194,9 +1360,17 @@ function buildSpellPath(spell, bindings, requireInvoke) {
   return `${orbKeys} -> ${keyLabelFromCode(bindings.invoke)} -> ${castKey}`;
 }
 
+function formatDuration(ms) {
+  if (!Number.isFinite(ms)) return "--";
+  const safeMs = Math.max(0, ms);
+  const seconds = safeMs / 1000;
+  return `${seconds >= 10 ? seconds.toFixed(1) : seconds.toFixed(2)}s`;
+}
+
 function statusText(result) {
   if (result.targetCompleted) return "正确，下一招。";
   if (result.freeStepRecorded) return "已记入当前自由连招，5 秒内继续接。";
+  if (result.action === "free-end") return "自由模式统计已结算。";
   if (result.action === "manual-refresh") return "已刷新全部技能和物品 CD。";
   if (result.correct) return "对，继续把这招打完。";
   const reasonMap = {
@@ -1286,5 +1460,6 @@ function startClock(app, elements) {
       }
     }
     renderCooldowns(app, elements);
+    renderSessionTimer(app, elements);
   }, 100);
 }

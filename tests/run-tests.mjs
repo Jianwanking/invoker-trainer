@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   applyPracticeKey,
   castSpell,
+  endFreeRun,
   finalizeFreeChain,
   createInvokerState,
   createPracticeSession,
@@ -177,6 +178,47 @@ test("full practice mode requires orbs, invoke, then the active cast key", () =>
   assert.equal(outcome.session.currentIndex, 1);
 });
 
+test("combo and real modes track combo time from first release key to final release key", () => {
+  let session = createPracticeSession({
+    keyBindings: makeKeyBindings("modern"),
+    mode: "combo",
+    requireInvokeCast: true,
+    targets: [
+      { type: "spell", id: "cold_snap" },
+      { type: "spell", id: "tornado" }
+    ]
+  });
+
+  session = press(session, "KeyQ", 100);
+  session = press(session, "KeyQ", 200);
+  session = press(session, "KeyQ", 300);
+  session = press(session, "KeyR", 400);
+  session = press(session, "KeyD", 500);
+
+  session = press(session, "KeyQ", 600);
+  session = press(session, "KeyW", 700);
+  session = press(session, "KeyW", 800);
+  session = press(session, "KeyR", 850);
+
+  const outcome = applyPracticeKey(session, "KeyD", 900);
+  assert.equal(outcome.result.targetCompleted, true);
+  assert.equal(outcome.session.comboTimer.startedAt, null);
+  assert.equal(outcome.session.comboTimer.lastCompletedMs, 400);
+});
+
+test("random mode timer starts after first valid key", () => {
+  let session = createPracticeSession({
+    keyBindings: makeKeyBindings("modern"),
+    mode: "random",
+    requireInvokeCast: true,
+    targets: [{ type: "spell", id: "cold_snap" }]
+  });
+
+  assert.equal(session.comboTimer.startedAt, null);
+  session = press(session, "KeyQ", 120);
+  assert.equal(session.comboTimer.startedAt, 120);
+});
+
 test("real mode blocks repeated spell casts until cooldown expires", () => {
   let session = createPracticeSession({
     keyBindings: makeKeyBindings("modern"),
@@ -330,6 +372,28 @@ test("free mode records successful casts and splits rows after a five second gap
   assert.equal(session.free.activeSteps.length, 0);
   assert.equal(session.free.history.length, 1);
   assert.deepEqual(session.free.history[0].steps.map((step) => step.id), ["tornado", "blink"]);
+});
+
+test("free mode end action settles total and average timing", () => {
+  let session = createPracticeSession({
+    keyBindings: makeKeyBindings("modern"),
+    mode: "free",
+    totalOrbLevel: 21
+  });
+
+  session = press(session, "KeyQ", 0);
+  session = press(session, "KeyW", 0);
+  session = press(session, "KeyW", 0);
+  session = press(session, "KeyR", 0);
+  session = applyPracticeKey(session, "KeyD", 100).session;
+  session = applyPracticeKey(session, "Digit1", 3100).session;
+
+  const ended = endFreeRun(session, 5100);
+  assert.equal(ended.free.activeSteps.length, 0);
+  assert.equal(ended.free.history.length, 1);
+  assert.equal(ended.free.summary.steps, 2);
+  assert.equal(ended.free.summary.totalMs, 5000);
+  assert.equal(ended.free.summary.averageMs, 2500);
 });
 
 console.log("All tests passed.");
