@@ -12,6 +12,7 @@ import {
   makeKeyBindings,
   pushOrb,
   refreshCooldowns,
+  setBindingAtPath,
   spellFromOrbs
 } from "../app.js";
 import { ITEMS } from "../data/items.js";
@@ -299,13 +300,35 @@ test("item keys only work for equipped items", () => {
   assert.equal(outcome.result.targetCompleted, true);
 });
 
-test("equipped item ids default to all supported active items", () => {
+test("equipped item ids default to six slots and include refresher", () => {
   const session = createPracticeSession({
     keyBindings: makeKeyBindings("modern"),
     mode: "free"
   });
 
-  assert.deepEqual(session.equippedItemIds, ITEMS.map((entry) => entry.id));
+  assert.equal(session.equippedItemIds.length, 6);
+  assert.equal(session.equippedItemIds.includes("refresher"), true);
+});
+
+test("equipped item ids are clamped to six when input has overflow", () => {
+  const session = createPracticeSession({
+    keyBindings: makeKeyBindings("modern"),
+    mode: "free",
+    equippedItemIds: ITEMS.map((entry) => entry.id)
+  });
+
+  assert.equal(session.equippedItemIds.length, 6);
+});
+
+test("item key rebinding keeps new key and clears previous owner", () => {
+  const bindings = makeKeyBindings("modern");
+  assert.equal(bindings.items.blink, "Digit1");
+  assert.equal(bindings.items.cyclone, "Digit2");
+
+  setBindingAtPath(bindings, "items.cyclone", "Digit1");
+
+  assert.equal(bindings.items.cyclone, "Digit1");
+  assert.equal(bindings.items.blink, "");
 });
 
 test("refresher orb resets spell and item cooldowns but keeps its own cooldown", () => {

@@ -22,7 +22,7 @@
 }
 
 body {
-  min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
   color: var(--text);
   background:
@@ -110,7 +110,10 @@ kbd {
 .page-shell {
   width: min(1680px, calc(100vw - 24px));
   margin: 0 auto;
-  padding: 32px 0 56px;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 0 0;
 }
 
 .hero {
@@ -175,7 +178,9 @@ kbd {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 24px;
-  align-items: start;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
 }
 
 .trainer-card {
@@ -187,10 +192,13 @@ kbd {
 }
 
 .arena {
+  position: relative;
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 168px);
-  padding: clamp(24px, 3.6vw, 48px);
+  min-height: 0;
+  height: 100%;
+  padding: clamp(20px, 2.8vw, 40px);
+  padding-bottom: clamp(254px, 30vh, 340px);
   overflow: hidden;
 }
 
@@ -235,8 +243,9 @@ kbd {
   position: relative;
   display: grid;
   align-items: center;
-  min-height: clamp(360px, 43vh, 520px);
-  margin: clamp(32px, 4.2vh, 58px) -48px 18px;
+  flex: 1 1 auto;
+  min-height: clamp(220px, 34vh, 430px);
+  margin: clamp(16px, 2.8vh, 36px) -48px 12px;
   overflow: hidden;
 }
 
@@ -405,35 +414,7 @@ kbd {
 }
 
 .center-target {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  width: fit-content;
-  min-height: 88px;
-  margin: 0 auto 10px;
-  border: 1px solid rgba(244, 216, 137, 0.28);
-  border-radius: 999px;
-  padding: 10px 24px 10px 10px;
-  background: rgba(4, 8, 12, 0.62);
-}
-
-.center-target img {
-  width: 68px;
-  height: 68px;
-  border-radius: 18px;
-}
-
-.center-target strong,
-.center-target span {
-  display: block;
-}
-
-.center-target strong {
-  font-size: 1.25rem;
-}
-
-.center-target span {
-  color: var(--muted);
+  display: none;
 }
 
 .status-line {
@@ -483,7 +464,7 @@ kbd {
   align-items: center;
   justify-content: center;
   gap: 14px;
-  margin: 0 auto 32px;
+  margin: 0 auto 18px;
   border: 1px solid rgba(244, 216, 137, 0.18);
   border-radius: 999px;
   padding: 8px;
@@ -510,7 +491,43 @@ kbd {
   z-index: 2;
   display: grid;
   grid-template-columns: 1fr 1.25fr 1.1fr 1.35fr;
-  gap: 18px;
+  gap: 14px;
+}
+
+.bottom-dock {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 9999;
+  display: grid;
+  gap: 10px;
+  width: min(1680px, calc(100vw - 24px));
+  margin: 0 auto;
+  padding: 0 0 8px;
+}
+
+.dock-hud section,
+.practice-footer .recent-panel {
+  backdrop-filter: blur(18px);
+}
+
+.dock-hud section {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.dock-hud .hud-label {
+  flex: 0 0 auto;
+}
+
+.dock-hud .orb-row,
+.dock-hud .slot-row,
+.dock-hud .cooldown-row,
+.dock-hud .equipment-row {
+  align-content: center;
+  flex: 0 0 auto;
 }
 
 .hud section,
@@ -541,7 +558,6 @@ kbd {
 .orb-row,
 .slot-row,
 .cooldown-row,
-.equipment-row,
 .recent-keys {
   display: flex;
   flex-wrap: wrap;
@@ -549,12 +565,17 @@ kbd {
 }
 
 .equipment-row {
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;
 }
 
 .equipment-card {
   position: relative;
   display: grid;
+  width: 100%;
+  min-width: 0;
   min-width: 76px;
   justify-items: center;
   gap: 6px;
@@ -604,7 +625,8 @@ kbd {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 14px;
   align-items: end;
-  margin-top: 14px;
+  margin-top: 0;
+  padding: 0;
 }
 
 .recent-panel {
@@ -1234,6 +1256,10 @@ body[data-flash="bad"] .status-line {
   .practice-footer {
     grid-template-columns: 1fr;
   }
+
+  .arena {
+    padding-bottom: 320px;
+  }
 }
 
 @media (max-width: 760px) {
@@ -1283,6 +1309,7 @@ body[data-flash="bad"] .status-line {
 
   .rail-wrap {
     margin-inline: -18px;
+    min-height: clamp(180px, 28vh, 300px);
   }
 
   .rail-card {
@@ -1299,5 +1326,104 @@ body[data-flash="bad"] .status-line {
 
   .combo-steps button {
     grid-column: span 1;
+  }
+
+  .arena {
+    padding-bottom: 388px;
+  }
+
+  .bottom-dock {
+    width: calc(100vw - 16px);
+    gap: 8px;
+    padding-bottom: 8px;
+  }
+
+  .dock-hud {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .practice-footer {
+    gap: 8px;
+  }
+}
+
+@media (max-height: 860px) {
+  .hero {
+    margin-bottom: 14px;
+  }
+
+  .rail-wrap {
+    min-height: clamp(170px, 24vh, 280px);
+    margin-top: 12px;
+    margin-bottom: 8px;
+  }
+
+  .center-target {
+    min-height: 76px;
+    padding-block: 8px;
+  }
+
+  .center-target img {
+    width: 56px;
+    height: 56px;
+  }
+
+  .status-line {
+    margin-bottom: 12px;
+  }
+}
+
+@media (max-height: 980px) and (min-height: 861px) {
+  .brand-logo {
+    width: clamp(44px, 5vw, 62px);
+    height: clamp(44px, 5vw, 62px);
+    border-radius: 16px;
+  }
+
+  .hero h1 {
+    font-size: clamp(2rem, 4.4vw, 3.6rem);
+  }
+
+  .hero {
+    margin-bottom: 10px;
+  }
+
+  .mode-tab {
+    padding: 0.5rem 0.78rem;
+    font-size: 0.84rem;
+  }
+
+  .arena {
+    padding-top: 16px;
+    padding-bottom: 272px;
+  }
+
+  .rail-wrap {
+    min-height: clamp(156px, 22vh, 248px);
+    margin-top: 10px;
+    margin-bottom: 6px;
+  }
+
+  .center-target {
+    min-height: 72px;
+    padding: 8px 20px 8px 8px;
+  }
+
+  .center-target img {
+    width: 52px;
+    height: 52px;
+  }
+
+  .status-line {
+    margin-bottom: 10px;
+  }
+
+  .hud section {
+    padding: 14px;
+  }
+
+  .bottom-dock {
+    gap: 8px;
+    padding-bottom: 6px;
   }
 }

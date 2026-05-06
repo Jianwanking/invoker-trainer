@@ -40,7 +40,15 @@ const DEFAULT_COMBOS = [
   }
 ];
 
-const DEFAULT_EQUIPPED_ITEM_IDS = ITEMS.map((item) => item.id);
+const MAX_EQUIPPED_ITEMS = 6;
+const DEFAULT_EQUIPPED_ITEM_IDS = [
+  "blink",
+  "cyclone",
+  "sheepstick",
+  "gleipnir",
+  "rod_of_atos",
+  "refresher"
+];
 
 function spellSteps(ids) {
   return ids.map((id) => ({ type: "spell", id }));
@@ -277,7 +285,7 @@ export function createPracticeSession({
     targets: targets.map((target) => ({ ...target })),
     currentIndex: 0,
     pendingSpellId: null,
-    equippedItemIds: [...equippedItemIds],
+    equippedItemIds: limitEquippedItems(equippedItemIds),
     invoker: createInvokerState({ totalOrbLevel, now }),
     comboTimer: createComboTimer(),
     recentKeys: [],
@@ -790,7 +798,7 @@ function bindUi(app, elements) {
     if (!checkbox) return;
     const itemId = checkbox.dataset.equipItem;
     app.settings.equippedItemIds = checkbox.checked
-      ? [...new Set([...app.settings.equippedItemIds, itemId])]
+      ? addEquippedItem(app.settings.equippedItemIds, itemId)
       : app.settings.equippedItemIds.filter((id) => id !== itemId);
     persistSettings(app);
     resetSession(app);
@@ -1011,11 +1019,13 @@ function renderRail(app, elements) {
 
   const target = describeStep(getCurrentTarget(app.session));
   const comboMode = isComboPracticeMode(app.settings.mode);
-  elements.centerTarget.innerHTML = target
-    ? `<img src="${target.icon}" alt=""><div><strong>${target.zh}</strong><span>${target.en}</span></div>`
-    : comboMode
-      ? `<div><strong>连招完成</strong><span>按 Enter 切下一套</span></div>`
-      : `<strong>完成！</strong>`;
+  if (elements.centerTarget) {
+    elements.centerTarget.innerHTML = target
+      ? `<img src="${target.icon}" alt=""><div><strong>${target.zh}</strong><span>${target.en}</span></div>`
+      : comboMode
+        ? `<div><strong>连招完成</strong><span>按 Enter 切下一套</span></div>`
+        : `<strong>完成！</strong>`;
+  }
 
   renderSessionComboNav(app, elements);
 
@@ -1043,7 +1053,9 @@ function renderFreeRail(app, elements) {
     }
   </div>`;
 
-  elements.centerTarget.innerHTML = `<div><strong>自由模式</strong><span>5 秒内继续输入会接在当前行</span></div>`;
+  if (elements.centerTarget) {
+    elements.centerTarget.innerHTML = `<div><strong>自由模式</strong><span>5 秒内继续输入会接在当前行</span></div>`;
+  }
   const last = app.session.lastResult;
   elements.status.textContent = last
     ? statusText(last)
@@ -1160,7 +1172,8 @@ function renderHud(app, elements) {
     </div>`;
   }).join("");
 
-  elements.equipment.innerHTML = app.settings.equippedItemIds.map((itemId) => {
+  const equippedItems = limitEquippedItems(app.settings.equippedItemIds);
+  elements.equipment.innerHTML = equippedItems.map((itemId) => {
     const item = getItem(itemId);
     if (!item) return "";
     const key = app.keyBindings.items[item.id];
@@ -1285,10 +1298,13 @@ function renderKeybinds(app, elements) {
 }
 
 function renderEquipmentSettings(app, elements) {
+  const equippedSet = new Set(app.settings.equippedItemIds);
+  const atLimit = equippedSet.size >= MAX_EQUIPPED_ITEMS;
   elements.equipmentSettings.innerHTML = ITEMS.map((item) => {
-    const checked = app.settings.equippedItemIds.includes(item.id) ? "checked" : "";
+    const checked = equippedSet.has(item.id) ? "checked" : "";
+    const disabled = !checked && atLimit ? "disabled" : "";
     return `<label class="equip-row">
-      <input type="checkbox" data-equip-item="${item.id}" ${checked}>
+      <input type="checkbox" data-equip-item="${item.id}" ${checked} ${disabled}>
       <img src="${item.icon}" alt="">
       <span>${item.zh}<small>${item.en}</small></span>
       <button type="button" class="equip-bind" data-bind-path="items.${item.id}">
@@ -1394,8 +1410,18 @@ function levelToOrbLevel(level) {
   return Math.max(1, Math.min(21, heroLevel + (heroLevel >= 6 ? 1 : 0) + (heroLevel >= 12 ? 1 : 0) + (heroLevel >= 18 ? 1 : 0)));
 }
 
-function setBindingAtPath(bindings, path, code) {
+export function setBindingAtPath(bindings, path, code) {
   const parts = path.split(".");
+  if (parts[0] === "items" && parts[1]) {
+    const targetId = parts[1];
+    Object.keys(bindings.items).forEach((itemId) => {
+      if (itemId !== targetId && bindings.items[itemId] === code) {
+        bindings.items[itemId] = "";
+      }
+    });
+    bindings.items[targetId] = code;
+    return;
+  }
   if (parts.length === 1) {
     bindings[parts[0]] = code;
     return;
@@ -1411,10 +1437,25 @@ function persistSettings(app) {
 }
 
 function normalizeEquippedItems(value) {
-  if (!Array.isArray(value)) return DEFAULT_EQUIPPED_ITEM_IDS;
+  if (!Array.isArray(value)) return [...DEFAULT_EQUIPPED_ITEM_IDS];
+  const filtered = limitEquippedItems(value);
+  return filtered.length ? filtered : [...DEFAULT_EQUIPPED_ITEM_IDS];
+}
+
+function limitEquippedItems(ids) {
   const validIds = new Set(ITEMS.map((item) => item.id));
-  const filtered = value.filter((id) => validIds.has(id));
-  return filtered.length ? filtered : DEFAULT_EQUIPPED_ITEM_IDS;
+  const deduped = [];
+  for (const id of ids) {
+    if (!validIds.has(id) || deduped.includes(id)) continue;
+    deduped.push(id);
+  }
+  return deduped.slice(0, MAX_EQUIPPED_ITEMS);
+}
+
+function addEquippedItem(currentIds, itemId) {
+  const next = currentIds.filter((id) => id !== itemId);
+  next.push(itemId);
+  return next.slice(-MAX_EQUIPPED_ITEMS);
 }
 
 function saveCombos(combos) {
