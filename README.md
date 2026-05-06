@@ -1,6 +1,7 @@
 # 卡尔技能训练网页
 
 一个无构建依赖的 Dota 2 Invoker 训练器。重点不是只按出 Q/W/E 三球，而是练习更贴近实战的三球滚动、Invoke、技能槽、释放键、物品键和冷却节奏。
+https://jianwanking.github.io/dota2-invoker-trainer/
 
 ## 功能
 
